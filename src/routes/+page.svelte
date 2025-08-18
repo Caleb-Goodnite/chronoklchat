@@ -1,11 +1,16 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
+  import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
+  
+  export const ssr = false;
 
   let input = '';
   let loading = false;
   let conversations = [];
   let activeConversationId = null;
   let messageEnd;
+  let messagesInner; // container for messages list
   let showSettings = false;
   let theme = 'dark'; // 'dark' | 'light'
   // local derived view rendered in template
@@ -122,6 +127,67 @@
     }
   }
 
+  function renderMarkdown(text) {
+    try {
+      const raw = marked.parse(String(text ?? ''));
+      return DOMPurify.sanitize(raw);
+    } catch {
+      return String(text ?? '');
+    }
+  }
+
+  // --- Monaco enhancement for AI code blocks ---
+  /** @type {Array<{ editor: any, model: any }>} */
+  let monacoInstances = [];
+  let messagesObserver;
+
+  async function enhanceCodeBlocks() {
+    try {
+      if (!messagesInner) return;
+      const codeNodes = messagesInner.querySelectorAll('.message.ai .message-text pre > code');
+      if (!codeNodes || codeNodes.length === 0) return;
+
+      // Lazy import monaco only if needed
+      const monaco = (await import('monaco-editor')).default ?? (await import('monaco-editor'));
+
+      codeNodes.forEach((codeEl) => {
+        const el = /** @type {HTMLElement} */ (codeEl);
+        if (el.dataset.enhanced === '1') return; // skip already enhanced
+
+        const pre = el.parentElement;
+        if (!pre) return;
+
+        const code = el.textContent || '';
+        const langClass = Array.from(el.classList).find((c) => c.startsWith('language-'));
+        const language = langClass ? langClass.replace('language-', '') : 'plaintext';
+
+        // Create wrapper for Monaco
+        const wrapper = document.createElement('div');
+        wrapper.className = 'monaco-wrapper';
+        const lines = Math.max(3, Math.min(24, code.split('\n').length + 1));
+        wrapper.style.height = `${Math.min(24 * lines, 420)}px`;
+        pre.replaceWith(wrapper);
+        el.dataset.enhanced = '1';
+
+        // Create model/editor
+        const model = monaco.editor.createModel(code, language);
+        const editor = monaco.editor.create(wrapper, {
+          model,
+          readOnly: true,
+          automaticLayout: true,
+          minimap: { enabled: false },
+          lineNumbers: 'on',
+          scrollBeyondLastLine: false,
+          theme: theme === 'dark' ? 'vs-dark' : 'vs',
+          wordWrap: 'on'
+        });
+        monacoInstances.push({ editor, model });
+      });
+    } catch (e) {
+      // fail silently if monaco fails to load
+    }
+  }
+
   onMount(() => {
     // Fix mobile 100vh issues by using real innerHeight
     function setAppHeight() {
@@ -134,7 +200,19 @@
       try { if (window.innerWidth > 900) mobileNavOpen = false; } catch {}
     };
     window.addEventListener('resize', onResize);
-    removeResize = () => window.removeEventListener('resize', onResize);
+
+    // Observe message list for changes and enhance code blocks
+    try {
+      if (messagesInner && typeof MutationObserver !== 'undefined') {
+        messagesObserver = new MutationObserver(() => {
+          enhanceCodeBlocks();
+        });
+        messagesObserver.observe(messagesInner, { childList: true, subtree: true });
+      }
+    } catch {}
+
+    // Initial enhancement after mount
+    setTimeout(() => enhanceCodeBlocks(), 0);
 
     // theme
     loadTheme();
@@ -298,7 +376,7 @@
       <!-- TEMP debug: shows message count and basic state to verify render path -->
       
       <div class="chat-messages" class:loading={loading}>
-        <div class="messages-inner">
+        <div class="messages-inner" bind:this={messagesInner}>
           {#if messages.length === 0}
             <div class="empty-state">
               <div class="empty-card">
@@ -314,9 +392,15 @@
                   <div class="message-role">
                     {message.role === 'user' ? 'You' : 'AI'}
                   </div>
-                  <div class="message-text">
-                    {message.content}
-                  </div>
+                  {#if message.role === 'ai'}
+                    <div class="message-text">
+                      {@html renderMarkdown(message.content)}
+                    </div>
+                  {:else}
+                    <div class="message-text">
+                      {@html renderMarkdown(message.content)}
+                    </div>
+                  {/if}
                 </div>
               </div>
             {:else if message.role === 'system'}
@@ -683,6 +767,46 @@
     word-break: break-word;
     color: var(--bubble-text) !important;
   }
+  /* Markdown styling within AI message text */
+  .message.ai .message-text :where(strong, b) { font-weight: 700; }
+  .message.ai .message-text :where(em, i) { font-style: italic; }
+  .message.ai .message-text code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    padding: 0.1rem 0.35rem;
+    border-radius: 6px;
+    color: var(--bubble-text);
+  }
+  .message.ai .message-text pre {
+    background: #0f1216;
+    color: #e6edf3;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    overflow: auto;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+  }
+  .message.ai .message-text pre code { background: transparent; border: 0; padding: 0; }
+  .message.ai .message-text blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 8px 0;
+    padding: 6px 12px;
+    background: rgba(4,114,77,0.08);
+  }
+  /* Monaco wrapper used to replace pre blocks for AI code */
+  .message.ai .message-text .monaco-wrapper {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    overflow: hidden;
+    margin: 8px 0;
+  }
+  .message.ai .message-text ul, .message.ai .message-text ol {
+    padding-left: 1.2rem;
+    margin: 0.35rem 0;
+  }
+  .message.ai .message-text p { margin: 0.35rem 0; }
   
   .chat-input-container {
     position: sticky;
