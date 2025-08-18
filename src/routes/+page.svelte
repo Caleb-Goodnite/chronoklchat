@@ -8,6 +8,8 @@
   let messageEnd;
   let showSettings = false;
   let theme = 'dark'; // 'dark' | 'light'
+  // local derived view rendered in template
+  let messages = [];
 
   const STORAGE_KEY = 'chronoklchat:conversations:v1';
   const THEME_KEY = 'chronoklchat:theme';
@@ -89,13 +91,20 @@
     return conversations.find(c => c.id === activeConversationId);
   }
 
-  // Derived view of messages for the template
-  $: messages = activeConv()?.messages ?? [];
+  // Derived view of messages for the template (track dependencies explicitly)
+  $: messages = (conversations.find(c => c.id === activeConversationId)?.messages) ?? [];
 
   function addMessage(role, content, extra = {}) {
-    const c = activeConv();
-    if (!c) return;
-    c.messages = [...c.messages, { role, content, ...extra }];
+    let c = activeConv();
+    // Fallback: create/select a conversation if none active
+    if (!c) {
+      const created = createConversation('Untitled');
+      ensureWelcome(created);
+      conversations = [created, ...conversations];
+      activeConversationId = created.id;
+      c = created;
+    }
+    c.messages = [...(c.messages || []), { role, content, ...extra }];
     conversations = conversations.map(x => x.id === c.id ? c : x);
     save();
   }
@@ -255,7 +264,9 @@
     </header>
 
     <div class="chat-container">
-      <div class="chat-messages" class:loading>
+      <!-- TEMP debug: shows message count and basic state to verify render path -->
+      
+      <div class="chat-messages" class:loading={loading}>
         <div class="messages-inner">
           {#if messages.length === 0}
             <div class="empty-state">
@@ -557,6 +568,9 @@
     width: 100%;
     max-width: 820px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
   
   .chat-messages.loading {
@@ -635,7 +649,7 @@
   .message-text {
     white-space: pre-wrap;
     word-break: break-word;
-    color: var(--bubble-text);
+    color: var(--bubble-text) !important;
   }
   
   .chat-input-container {
