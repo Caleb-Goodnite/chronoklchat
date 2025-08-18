@@ -1,0 +1,33 @@
+/* Global variables only; component styles handle chat UI */
+:root {
+  --bg: #000000;
+  --text: #ffffff;
+  --user-bg: #007bff;
+  --user-text: white;
+  --ai-bg: #e9ecef;
+  --ai-text: #333;
+  --input-bg: white;
+  --border: #dee2e6;
+}
+
+/* Base reset */
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
