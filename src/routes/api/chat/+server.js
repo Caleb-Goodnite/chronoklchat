@@ -8,47 +8,109 @@ function mapRole(role) {
   return map[role] || 'user';
 }
 
+// Helper to process message content for the API
+function processMessageContent(content) {
+  if (!content) return [];
+  
+  // If it's a string, wrap it in a text content part
+  if (typeof content === 'string') {
+    return [{ type: 'text', text: content }];
+  }
+  
+  // If it's an array, process each part
+  if (Array.isArray(content)) {
+    return content.map(part => {
+      if (part.type === 'image_url' && part.image_url && part.image_url.url) {
+        // Handle base64 images or URLs
+        return {
+          type: 'image_url',
+          image_url: {
+            url: part.image_url.url
+          }
+        };
+      }
+      // Default to text
+      return { type: 'text', text: String(part.text || '') };
+    }).filter(part => part.text || (part.type === 'image_url' && part.image_url.url));
+  }
+  
+  // Default fallback
+  return [{ type: 'text', text: String(content) }];
+}
+
 export async function POST({ request, url }) {
   try {
     const body = await request.json();
-    const { messages, model } = body || {};
+    const { messages, model: frontendModel } = body || {};
     
     if (!Array.isArray(messages) || messages.length === 0) {
       return json({ error: 'messages is required and must be a non-empty array' }, { status: 400 });
     }
 
-    const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY || '';
-    const OPENROUTER_MODEL = env.OPENROUTER_MODEL || 'openai/gpt-oss-20b';
-    const APP_REFERER = env.APP_REFERER || url.origin || 'http://localhost:5173';
-    const APP_TITLE = env.APP_TITLE || 'ChronoklChat';
-
+    const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY;
     if (!OPENROUTER_API_KEY) {
       return json({ error: 'Server missing OPENROUTER_API_KEY' }, { status: 500 });
     }
 
-    // Filter out loading messages and map roles
+    // Get model from the request or default to Llama 3.3 70B
+    const model = frontendModel || 'meta-llama/llama-3.3-70b-instruct';
+    const APP_REFERER = env.APP_REFERER || url.origin || 'http://localhost:5173';
+
+    // Process messages for the API
     const filteredMessages = messages
       .filter(m => !m.loading)
-      .map(({ role, content }) => ({
-        role: mapRole(role),
-        content: content
-      }));
+      .map(({ role, content }) => {
+        // Handle different content formats (text, array of content parts, etc.)
+        let processedContent = content;
+        
+        if (Array.isArray(content)) {
+          // Handle array content (text + images)
+          processedContent = content.map(part => {
+            if (part.type === 'image_url' && part.image_url?.url) {
+              return {
+                type: 'image_url',
+                image_url: {
+                  url: part.image_url.url
+                }
+              };
+            }
+            return { type: 'text', text: String(part.text || part) };
+          });
+        } else if (typeof content === 'string') {
+          processedContent = [{ type: 'text', text: content }];
+        }
+        
+        return {
+          role: mapRole(role),
+          content: processedContent
+        };
+      });
 
-    const openai = new OpenAI({
-      baseURL: 'https://openrouter.ai/api/v1',
-      apiKey: OPENROUTER_API_KEY,
-      defaultHeaders: {
-        'HTTP-Referer': APP_REFERER,
-        'X-Title': APP_TITLE,
-      },
-    });
-
-    const completion = await openai.chat.completions.create({
-      model: model || OPENROUTER_MODEL,
+    // Prepare the request body
+    const requestBody = {
+      model,
       messages: filteredMessages,
-      temperature: 0.5,
-      max_tokens: 1000
+      // Add any model-specific parameters
+      ...(model.includes('llama') && {
+        // Llama-specific settings
+        temperature: 0.7,
+        max_tokens: 2048,
+        top_p: 0.9,
+      })
+    };
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'HTTP-Referer': APP_REFERER,
+        'X-Title': 'ChronoklChat',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
     });
+
+    const completion = await response.json();
 
     const responseMessage = completion.choices[0]?.message;
     

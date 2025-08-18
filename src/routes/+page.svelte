@@ -70,8 +70,25 @@
   function ensureWelcome(conv) {
     if (conv.messages.length === 0) {
       conv.messages.push(
-        { role: 'system', content: 'You are a helpful AI assistant. Keep your responses concise and to the point.' },
-        { role: 'ai', content: 'Hello! How can I assist you today?' }
+        { 
+          role: 'system', 
+          content: 'You are Llama 3.3, an AI assistant created by Caleb G. You are helpful, precise, and thoughtful in your responses.\n\n' +
+                  'Guidelines:\n' +
+                  '- Be concise but thorough in your responses\n' +
+                  '- Use markdown formatting when helpful (``` for code, **bold** for emphasis)\n' +
+                  '- If you\'re unsure about something, say so rather than guessing\n' +
+                  '- Be friendly and approachable in your tone\n' +
+                  '- Break down complex topics into easy-to-understand explanations\n' +
+                  '- When providing code, include comments and context\n' +
+                  '- Keep responses focused and on-topic\n' +
+                  '- Be proactive in offering help and suggestions\n' +
+                  '- Maintain a professional but conversational tone\n\n' +
+                  'Remember to be patient and understanding with users of all technical levels.'
+        },
+        { 
+          role: 'ai', 
+          content: 'Hello! I\'m Llama 3.3, your AI assistant. I\'m here to help with any questions you have. What can I assist you with today?' 
+        }
       );
     }
   }
@@ -321,14 +338,48 @@
 </script>
 
 <svelte:head>
-  <title>ChronoklChat</title>
+  <title>ChronoklChat - Open Source AI Chat Interface</title>
+  <meta name="description" content="Chat with advanced AI models in a clean, private, and fast interface. No tracking, no ads, just powerful AI conversations." />
+  <meta name="keywords" content="AI chat, open source AI, ChatGPT alternative, private chat, AI assistant, Chronokl" />
+  <meta name="author" content="Chronokl" />
+  <meta name="robots" content="index, follow" />
+  
+  <!-- Preconnect to external domains -->
+  <link rel="preconnect" href="https://api.openai.com" />
+  <link rel="preconnect" href="https://openrouter.ai" />
+  
+  <!-- Preload critical assets -->
+  <link rel="preload" as="style" href="/app.css" />
+  
+  <!-- Structured Data for Chat Application -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ChronoklChat",
+      "applicationCategory": "ChatApplication",
+      "operatingSystem": "Web Browser",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "description": "Open source AI chat interface with support for multiple models",
+      "featureList": [
+        "Private and secure conversations",
+        "Multiple AI models",
+        "Markdown support",
+        "Code highlighting"
+      ]
+    }
+  </script>
 </svelte:head>
 
 <div class="app">
   <aside class="sidebar" class:open={mobileNavOpen}>
     <div class="sidebar-header">
       <div class="brand">ChronoklChat</div>
-      <div class="model-pill">openai/gpt-oss-20b</div>
+      <div class="model-pill">Llama 3.3 70B</div>
     </div>
     <nav class="nav">
       <button class="primary-btn" on:click={newChat}>+ New Chat</button>
@@ -388,19 +439,20 @@
           {#each messages as message, i (message.id || i)}
             {#if message.role === 'user' || message.role === 'ai'}
               <div class="message {message.role}">
+                <div class="message-avatar">
+                  {message.role === 'user' ? '💬' : '🦙'}
+                </div>
                 <div class="message-content">
                   <div class="message-role">
-                    {message.role === 'user' ? 'You' : 'AI'}
+                    {message.role === 'user' ? 'You' : 'Llama 3.3 70B'}
                   </div>
-                  {#if message.role === 'ai'}
-                    <div class="message-text">
+                  <div class="message-text">
+                    {#if message.role === 'user'}
+                      {message.content}
+                    {:else}
                       {@html renderMarkdown(message.content)}
-                    </div>
-                  {:else}
-                    <div class="message-text">
-                      {@html renderMarkdown(message.content)}
-                    </div>
-                  {/if}
+                    {/if}
+                  </div>
                 </div>
               </div>
             {:else if message.role === 'system'}
@@ -441,7 +493,7 @@
               {/if}
             </button>
           </div>
-          <div class="hint">Enter to send • Shift+Enter = new line</div>
+          <div class="hint">Enter to send • Shift+Enter = new line. Developed by Caleb G.</div>
         </form>
       </div>
     </div>
@@ -721,20 +773,99 @@
     to { opacity: 1; transform: translateY(0); }
   }
   
+  .message {
+    margin-bottom: 1.25rem;
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 1.25rem;
+    max-width: 85%;
+    margin-left: 0;
+  }
+  
+  .message.ai {
+    margin-right: auto;
+  }
+
+  .message.user {
+    margin-left: auto;
+    margin-right: 0.5rem;
+  }
+
+  .message-avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    background: #2d3748;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    margin-top: 0.25rem;
+  }
+  
+  .message.user .message-avatar {
+    background: #4a5568;
+  }
+
   .message-content {
+    max-width: calc(100% - 3rem);
+    padding: 0.75rem 1rem;
+    border-radius: 1rem;
     background: var(--bubble);
-    color: var(--bubble-text);
-    border-radius: 16px;
-    padding: 14px 16px;
-    display: inline-block;
-    border: 1px solid var(--border);
-    box-shadow: 0 10px 28px rgba(0,0,0,0.55);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+
+  .message-role {
+    font-weight: 600;
+    font-size: 0.7rem;
+    margin-bottom: 0.25rem;
+    color: #a0aec0;
+    letter-spacing: 0.05em;
+  }
+
+  .message-text {
+    line-height: 1.55;
+    word-wrap: break-word;
+    font-size: 0.9375rem;
   }
   
   .message.user .message-content {
-    background: var(--bubble); /* unify with AI bubble */
-    color: var(--bubble-text);
-    border-bottom-right-radius: 0.25rem;
+    background: #2d3748;
+    color: #f7fafc;
+    border-bottom-right-radius: 0.5rem;
+  }
+  
+  .message.ai .message-content {
+    background: #2d3748;
+    color: #f7fafc;
+    border-bottom-left-radius: 0.5rem;
+  }
+
+  .message.user .message-text {
+    color: var(--text);
+  }
+
+  .message.ai .message-text {
+    color: var(--text);
+  }
+
+  .uploaded-image {
+    max-width: 100%;
+    max-height: 400px;
+    border-radius: 8px;
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    object-fit: contain;
+    background: var(--bg);
+    padding: 4px;
+  }
+  
+  .message.user .message-content {
+    background: #2d3748;
+    color: #f7fafc;
+    border-bottom-right-radius: 4px;
   }
   
   .message.ai .message-content {
@@ -767,46 +898,7 @@
     word-break: break-word;
     color: var(--bubble-text) !important;
   }
-  /* Markdown styling within AI message text */
-  .message.ai .message-text :where(strong, b) { font-weight: 700; }
-  .message.ai .message-text :where(em, i) { font-style: italic; }
-  .message.ai .message-text code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid var(--border);
-    padding: 0.1rem 0.35rem;
-    border-radius: 6px;
-    color: var(--bubble-text);
-  }
-  .message.ai .message-text pre {
-    background: #0f1216;
-    color: #e6edf3;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 14px;
-    overflow: auto;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
-  }
-  .message.ai .message-text pre code { background: transparent; border: 0; padding: 0; }
-  .message.ai .message-text blockquote {
-    border-left: 3px solid var(--accent);
-    margin: 8px 0;
-    padding: 6px 12px;
-    background: rgba(4,114,77,0.08);
-  }
-  /* Monaco wrapper used to replace pre blocks for AI code */
-  .message.ai .message-text .monaco-wrapper {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--panel);
-    overflow: hidden;
-    margin: 8px 0;
-  }
-  .message.ai .message-text ul, .message.ai .message-text ol {
-    padding-left: 1.2rem;
-    margin: 0.35rem 0;
-  }
-  .message.ai .message-text p { margin: 0.35rem 0; }
+  /* Message text styling */
   
   .chat-input-container {
     position: sticky;

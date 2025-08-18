@@ -1,3 +1,14 @@
-# allow crawling everything by default
+# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /api/
+Disallow: /_app/
+Disallow: /_snowpack/
+Disallow: /*.json$
+Disallow: /*.js$
+Disallow: /*.css$
+
+# Sitemap
+Sitemap: https://chronokl.com/sitemap.xml
+
+# Crawl-delay: 10  # Uncomment if needed to reduce server load
