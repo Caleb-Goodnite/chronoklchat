@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
 
   let input = '';
   let loading = false;
@@ -10,6 +10,10 @@
   let theme = 'dark'; // 'dark' | 'light'
   // local derived view rendered in template
   let messages = [];
+  // mobile drawer state
+  let mobileNavOpen = false;
+  // keep track of resize listeners cleanup
+  let removeResize;
 
   const STORAGE_KEY = 'chronoklchat:conversations:v1';
   const THEME_KEY = 'chronoklchat:theme';
@@ -84,6 +88,8 @@
       conversations = conversations.map(x => x.id === c.id ? c : x);
     }
     save();
+    // Close drawer on mobile after selecting a chat
+    mobileNavOpen = false;
     queueMicrotask(scrollToBottom);
   }
 
@@ -117,6 +123,19 @@
   }
 
   onMount(() => {
+    // Fix mobile 100vh issues by using real innerHeight
+    function setAppHeight() {
+      try { document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`); } catch {}
+    }
+    setAppHeight();
+    const onResize = () => {
+      setAppHeight();
+      // Auto-close drawer when switching to desktop
+      try { if (window.innerWidth > 900) mobileNavOpen = false; } catch {}
+    };
+    window.addEventListener('resize', onResize);
+    removeResize = () => window.removeEventListener('resize', onResize);
+
     // theme
     loadTheme();
     applyTheme();
@@ -145,6 +164,10 @@
       activeConversationId = first.id;
       save();
     }
+  });
+
+  onDestroy(() => {
+    if (typeof removeResize === 'function') removeResize();
   });
 
   async function send() {
@@ -224,7 +247,7 @@
 </svelte:head>
 
 <div class="app">
-  <aside class="sidebar">
+  <aside class="sidebar" class:open={mobileNavOpen}>
     <div class="sidebar-header">
       <div class="brand">ChronoklChat</div>
       <div class="model-pill">openai/gpt-oss-20b</div>
@@ -251,10 +274,18 @@
       <button class="ghost-btn" on:click={() => (showSettings = true)}>Settings</button>
     </div>
   </aside>
+  {#if mobileNavOpen}
+    <button class="drawer-backdrop" on:click={() => (mobileNavOpen = false)} aria-label="Close menu"></button>
+  {/if}
 
   <div class="main">
     <header class="topbar">
       <div class="topbar-left">
+        <button class="menu-btn" on:click={() => (mobileNavOpen = true)} aria-label="Open menu">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
+          </svg>
+        </button>
         <h1>{activeConv()?.title || 'Chat'}</h1>
       </div>
       <div class="topbar-right">
@@ -408,7 +439,7 @@
   .app {
     display: flex;
     flex-direction: row;
-    height: 100vh;
+    height: var(--app-h, 100vh);
     width: 100%;
     margin: 0;
     padding: 0;
@@ -535,6 +566,7 @@
     border-bottom: 1px solid var(--border);
     background: var(--panel);
   }
+  .topbar-left { display: flex; align-items: center; gap: 8px; }
   .topbar h1 { font-size: 1rem; margin: 0; color: var(--text); }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
   .online { background: #04724D; box-shadow: 0 0 8px #04724D; }
@@ -755,6 +787,20 @@
     text-align: center;
     margin-top: 0.5rem;
   }
+
+  /* Hamburger button - visible on mobile only */
+  .menu-btn {
+    display: none;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
   
   .app-footer {
     text-align: center;
@@ -807,9 +853,35 @@
   }
 
   @media (max-width: 900px) {
-    .sidebar { display: none; }
+    .menu-btn { display: inline-flex; }
     .app { flex-direction: column; }
     .topbar { position: sticky; top: 0; z-index: 10; }
+
+    /* Sidebar becomes a drawer */
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: min(80vw, 280px);
+      max-width: 92vw;
+      height: 100vh;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      z-index: 100;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      border: 0;
+      margin: 0;
+      padding: 0;
+      z-index: 90;
+    }
   }
   
   @media (max-width: 767px) {
@@ -828,5 +900,26 @@
     .message-role {
       font-size: 0.7rem;
     }
+  }
+
+  /* Height-based responsiveness for short viewports */
+  @media (max-height: 720px) {
+    .topbar { padding: 10px 12px; }
+    .chat-messages { padding: 16px 18px; padding-bottom: 104px; }
+    .chat-input-container { padding: 12px 16px; }
+    textarea { min-height: 44px; }
+  }
+  @media (max-height: 620px) {
+    .topbar { padding: 8px 10px; }
+    .chat-messages { padding: 12px 14px; padding-bottom: 96px; }
+    .chat-input-container { padding: 10px 14px; }
+    .hint { display: none; }
+    textarea { min-height: 40px; max-height: 140px; }
+  }
+  @media (max-height: 520px) {
+    .chat-messages { padding: 8px 10px; padding-bottom: 88px; }
+    .message-content { padding: 10px 12px; }
+    .message-role { display: none; }
+    .empty-state { padding: 16px 0; }
   }
 </style>
