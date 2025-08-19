@@ -72,7 +72,7 @@
       conv.messages.push(
         { 
           role: 'system', 
-          content: 'You are Llama 3.3, an AI assistant created by Caleb G. You are helpful, precise, and thoughtful in your responses.\n\n' +
+          content: 'You are GPT 5, an AI assistant through a site called Chronokl. You are helpful, precise, and thoughtful in your responses.\n\n' +
                   '## Core Guidelines\n' +
                   '- Be concise but thorough in your responses\n' +
                   '- Use markdown formatting when helpful (``` for code, **bold** for emphasis)\n' +
@@ -94,7 +94,7 @@
         },
         { 
           role: 'ai', 
-          content: 'Hello! I\'m Llama 3.3, your AI assistant. I\'m here to help with any questions you have. What can I assist you with today?' 
+          content: 'Hello! I\'m GPT 5, your AI assistant. I\'m here to help with any questions you have. What can I assist you with today?' 
         }
       );
     }
@@ -345,9 +345,9 @@
 </script>
 
 <svelte:head>
-  <title>ChronoklChat - Open Source AI Chat Interface</title>
+  <title>ChronoklChat - AI Chat Interface</title>
   <meta name="description" content="Chat with advanced AI models in a clean, private, and fast interface. No tracking, no ads, just powerful AI conversations." />
-  <meta name="keywords" content="AI chat, open source AI, ChatGPT alternative, private chat, AI assistant, Chronokl" />
+  <meta name="keywords" content="AI chat, AI, ChatGPT alternative, private chat, AI assistant, Chronokl" />
   <meta name="author" content="Chronokl" />
   <meta name="robots" content="index, follow" />
   
@@ -363,7 +363,7 @@
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      "name": "ChronoklChat",
+      "name": "Chronokl",
       "applicationCategory": "ChatApplication",
       "operatingSystem": "Web Browser",
       "offers": {
@@ -371,7 +371,7 @@
         "price": "0",
         "priceCurrency": "USD"
       },
-      "description": "Open source AI chat interface with support for multiple models",
+      "description": "Ai chat interface to get help with coding, learning, and more.",
       "featureList": [
         "Private and secure conversations",
         "Multiple AI models",
@@ -385,8 +385,8 @@
 <div class="app">
   <aside class="sidebar" class:open={mobileNavOpen}>
     <div class="sidebar-header">
-      <div class="brand">ChronoklChat</div>
-      <div class="model-pill">Llama 3.3 70B</div>
+      <div class="brand">Chronokl</div>
+      <div class="model-pill">GPT 5 Nano</div>
     </div>
     <nav class="nav">
       <button class="primary-btn" on:click={newChat}>+ New Chat</button>
@@ -447,11 +447,11 @@
             {#if message.role === 'user' || message.role === 'ai'}
               <div class="message {message.role}">
                 <div class="message-avatar">
-                  {message.role === 'user' ? '💬' : '🦙'}
+                  {message.role === 'user' ? '😶‍🌫️' : '🤓'}
                 </div>
                 <div class="message-content">
                   <div class="message-role">
-                    {message.role === 'user' ? 'You' : 'Llama 3.3 70B'}
+                    {message.role === 'user' ? 'You' : 'GPT 5'}
                   </div>
                   <div class="message-text">
                     {#if message.role === 'user'}

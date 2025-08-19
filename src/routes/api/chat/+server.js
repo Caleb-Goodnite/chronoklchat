@@ -52,8 +52,8 @@ export async function POST({ request, url }) {
       return json({ error: 'Server missing OPENROUTER_API_KEY' }, { status: 500 });
     }
 
-    // Get model from the request or default to Llama 3.3 70B
-    const model = frontendModel || 'meta-llama/llama-3.3-70b-instruct';
+    // Get model from the request or default to GPT-5 Nano
+    const model = frontendModel || 'openai/gpt-5-nano';
     const APP_REFERER = env.APP_REFERER || url.origin || 'http://localhost:5173';
 
     // Process messages for the API
@@ -91,10 +91,10 @@ export async function POST({ request, url }) {
       model,
       messages: filteredMessages,
       // Add any model-specific parameters
-      ...(model.includes('llama') && {
-        // Llama-specific settings
-        temperature: 0.7,
-        max_tokens: 2048,
+      ...(model.includes('gpt-5') && {
+        // GPT-5-specific settings
+        temperature: 0.75,
+        max_tokens: 3000,
         top_p: 0.9,
       })
     };
