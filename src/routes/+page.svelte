@@ -425,6 +425,12 @@
         <h1>{activeConv()?.title || 'Chat'}</h1>
       </div>
       <div class="topbar-right">
+        <button class="settings-btn" on:click={() => showSettings = true} aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
         <span class="status-dot online"></span>
         <span class="status-text">Connected</span>
       </div>
@@ -569,13 +575,13 @@
     line-height: 1.6;
     color: var(--text);
     background-color: var(--bg);
-    overflow: hidden;
+    -webkit-overflow-scrolling: touch;
   }
   
   .app {
     display: flex;
     flex-direction: row;
-    height: var(--app-h, 100vh);
+    height: 100vh;
     width: 100%;
     margin: 0;
     padding: 0;
@@ -701,8 +707,26 @@
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
     background: var(--panel);
+    position: sticky;
+    top: 0;
+    z-index: 100;
   }
   .topbar-left { display: flex; align-items: center; gap: 8px; }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .settings-btn {
+    background: none;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .topbar h1 { font-size: 1rem; margin: 0; color: var(--text); }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
   .online { background: #04724D; box-shadow: 0 0 8px #04724D; }
@@ -722,14 +746,14 @@
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 24px 28px;
+    padding: 16px 16px 120px;
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding-bottom: 120px; /* space for input */
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+    overscroll-behavior: contain;
   }
 
   .messages-inner {
@@ -1076,31 +1100,32 @@
     /* Sidebar becomes a drawer */
     .sidebar {
       position: fixed;
-      top: 0; left: 0; bottom: 0;
-      width: min(80vw, 280px);
-      max-width: 92vw;
-      height: 100vh;
-      transform: translateX(-100%);
-      transition: transform 0.25s ease;
-      z-index: 100;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+      top: 0;
+      left: -300px;
+      bottom: 0;
+      z-index: 1000;
+      transition: transform 0.3s ease;
     }
+    
     .sidebar.open {
-      transform: translateX(0);
+      transform: translateX(300px);
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
     }
-
+    
     .drawer-backdrop {
       position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.45);
-      border: 0;
-      margin: 0;
-      padding: 0;
-      z-index: 90;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+      backdrop-filter: blur(2px);
     }
-  }
-  
-  @media (max-width: 767px) {
+    
+    .chat-messages {
+      padding: 12px;
+    }
     .message {
       max-width: 90%;
     }
