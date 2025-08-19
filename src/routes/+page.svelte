@@ -576,6 +576,10 @@
     color: var(--text);
     background-color: var(--bg);
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
+    position: fixed;
+    overflow: hidden;
+    touch-action: pan-y;
   }
   
   .app {
@@ -591,9 +595,8 @@
     left: 0;
     right: 0;
     bottom: 0;
-    max-width: 100%;
-    overflow: hidden;
     color: #F4F4F9;
+    overflow: hidden;
   }
 
   /* Sidebar */
@@ -736,10 +739,11 @@
     display: flex;
     flex-direction: column;
     flex: 1;
-    overflow: hidden;
     position: relative;
     width: 100%;
     max-width: 100%;
+    height: 100vh;
+    max-height: -webkit-fill-available;
   }
   
   .chat-messages {
@@ -754,6 +758,11 @@
     max-width: 100%;
     box-sizing: border-box;
     overscroll-behavior: contain;
+    height: 100%;
+    position: relative;
+    touch-action: pan-y;
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
   }
 
   .messages-inner {
@@ -763,6 +772,8 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+    min-height: min-content;
+    padding-bottom: 20px;
   }
   
   .chat-messages.loading {
