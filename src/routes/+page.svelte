@@ -106,7 +106,7 @@
     conversations = [c, ...conversations];
     activeConversationId = c.id;
     save();
-    queueMicrotask(scrollToBottom);
+    queueMicrotask(() => scrollToBottom(true));
   }
 
   function selectChat(id) {
@@ -119,7 +119,7 @@
     save();
     // Close drawer on mobile after selecting a chat
     mobileNavOpen = false;
-    queueMicrotask(scrollToBottom);
+    queueMicrotask(() => scrollToBottom(true));
   }
 
   function activeConv() {
@@ -128,6 +128,14 @@
 
   // Derived view of messages for the template (track dependencies explicitly)
   $: messages = (conversations.find(c => c.id === activeConversationId)?.messages) ?? [];
+  
+  // Only auto-scroll when new messages are added
+  let prevMessagesLength = 0;
+  $: if (messages.length > prevMessagesLength) {
+    const isNewMessage = messages.length > prevMessagesLength + 1;
+    scrollToBottom(isNewMessage);
+    prevMessagesLength = messages.length;
+  }
 
   function addMessage(role, content, extra = {}) {
     let c = activeConv();
@@ -144,9 +152,17 @@
     save();
   }
 
-  // Auto-scroll to bottom when messages change
-  function scrollToBottom() {
-    if (messageEnd) {
+  // Only auto-scroll if already near the bottom
+  function scrollToBottom(force = false) {
+    if (!messageEnd) return;
+    
+    const container = messageEnd.parentElement?.parentElement;
+    if (!container) return;
+    
+    // Only auto-scroll if we're already near the bottom (within 300px)
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 300;
+    
+    if (force || isNearBottom) {
       messageEnd.scrollIntoView({ behavior: 'smooth' });
     }
   }
@@ -742,13 +758,18 @@
     position: relative;
     width: 100%;
     max-width: 100%;
-    height: 100vh;
-    max-height: -webkit-fill-available;
+    height: 100%;
+    contain: content;
+    overflow: hidden;
+    /* Fix for Android scrolling */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: transform;
   }
   
   .chat-messages {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: scroll;
     -webkit-overflow-scrolling: touch;
     padding: 16px 16px 120px;
     display: flex;
@@ -757,12 +778,23 @@
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
     height: 100%;
     position: relative;
     touch-action: pan-y;
-    -webkit-transform: translate3d(0, 0, 0);
-    transform: translate3d(0, 0, 0);
+    -webkit-overflow-scrolling: touch;
+    overflow-anchor: none;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: transform;
+    /* Force hardware acceleration */
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    perspective: 1000;
+    -webkit-perspective: 1000;
+    transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
   }
 
   .messages-inner {
@@ -772,8 +804,12 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    min-height: min-content;
-    padding-bottom: 20px;
+    min-height: calc(100% - 20px);
+    padding-bottom: 40px;
+    position: relative;
+    /* Prevent margin collapse */
+    padding-top: 1px;
+    margin-top: -1px;
   }
   
   .chat-messages.loading {
