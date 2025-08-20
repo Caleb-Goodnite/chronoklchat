@@ -745,17 +745,15 @@
     width: 100%;
     max-width: 100%;
     height: 100%;
-    contain: content;
     overflow: hidden;
-    /* Fix for Android scrolling */
+    -webkit-overflow-scrolling: touch;
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
-    will-change: transform;
   }
   
   .chat-messages {
     flex: 1;
-    overflow-y: scroll;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     padding: 16px 16px 120px;
     display: flex;
@@ -764,23 +762,13 @@
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     height: 100%;
     position: relative;
     touch-action: pan-y;
-    -webkit-overflow-scrolling: touch;
-    overflow-anchor: none;
+    overscroll-behavior: contain;
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
-    will-change: transform;
-    /* Force hardware acceleration */
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    perspective: 1000;
-    -webkit-perspective: 1000;
-    transform-style: preserve-3d;
-    -webkit-transform-style: preserve-3d;
   }
 
   .messages-inner {
@@ -790,12 +778,9 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    min-height: calc(100% - 20px);
-    padding-bottom: 40px;
+    min-height: 100%;
+    padding: 1px 0 40px;
     position: relative;
-    /* Prevent margin collapse */
-    padding-top: 1px;
-    margin-top: -1px;
   }
   
   .chat-messages.loading {
