@@ -106,7 +106,7 @@
     conversations = [c, ...conversations];
     activeConversationId = c.id;
     save();
-    queueMicrotask(() => scrollToBottom(true));
+    // No auto-scrolling
   }
 
   function selectChat(id) {
@@ -119,7 +119,7 @@
     save();
     // Close drawer on mobile after selecting a chat
     mobileNavOpen = false;
-    queueMicrotask(() => scrollToBottom(true));
+    // No auto-scrolling
   }
 
   function activeConv() {
@@ -129,13 +129,7 @@
   // Derived view of messages for the template (track dependencies explicitly)
   $: messages = (conversations.find(c => c.id === activeConversationId)?.messages) ?? [];
   
-  // Only auto-scroll when new messages are added
-  let prevMessagesLength = 0;
-  $: if (messages.length > prevMessagesLength) {
-    const isNewMessage = messages.length > prevMessagesLength + 1;
-    scrollToBottom(isNewMessage);
-    prevMessagesLength = messages.length;
-  }
+  // No auto-scroll tracking
 
   function addMessage(role, content, extra = {}) {
     let c = activeConv();
@@ -150,21 +144,13 @@
     c.messages = [...(c.messages || []), { role, content, ...extra }];
     conversations = conversations.map(x => x.id === c.id ? c : x);
     save();
+    
+    // No auto-scrolling
   }
 
-  // Only auto-scroll if already near the bottom
-  function scrollToBottom(force = false) {
-    if (!messageEnd) return;
-    
-    const container = messageEnd.parentElement?.parentElement;
-    if (!container) return;
-    
-    // Only auto-scroll if we're already near the bottom (within 300px)
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 300;
-    
-    if (force || isNearBottom) {
-      messageEnd.scrollIntoView({ behavior: 'smooth' });
-    }
+  // Manual scrolling only - no auto-scroll
+  function scrollToBottom() {
+    // No-op - scrolling is now completely manual
   }
 
   function renderMarkdown(text) {
@@ -361,7 +347,7 @@
 </script>
 
 <svelte:head>
-  <title>ChronoklChat - AI Chat Interface</title>
+  <title>Chronokl - AI Chat Interface</title>
   <meta name="description" content="Chat with advanced AI models in a clean, private, and fast interface. No tracking, no ads, just powerful AI conversations." />
   <meta name="keywords" content="AI chat, AI, ChatGPT alternative, private chat, AI assistant, Chronokl" />
   <meta name="author" content="Chronokl" />
