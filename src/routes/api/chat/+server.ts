@@ -210,7 +210,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
   }
 };
 
-export const POST_generateName: RequestHandler = async ({ request }) => {
+export const _generateName: RequestHandler = async ({ request }) => {
   try {
     const body: NameGenerationRequest = await request.json();
     const { messages } = body;
