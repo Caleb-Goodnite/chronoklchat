@@ -158,6 +158,26 @@
 
       const monaco = (await import('monaco-editor')).default ?? (await import('monaco-editor'));
 
+      // Configure Monaco web workers to prevent UI freezes
+      self.MonacoEnvironment = {
+        getWorkerUrl: function(moduleId, label) {
+          if (label === 'json') {
+            return 'data:application/javascript;charset=utf-8;base64,' + btoa([
+              'self.MonacoEnvironment = undefined;',
+              'self.AcquisitionObject = undefined;',
+              'importScripts("https://cdnjs.cloudflare.com/ajax/libs/es5-shim/4.5.10/es5-sham.min.js");',
+              'importScripts("https://cdnjs.cloudflare.com/ajax/libs/json2/20150501/json2.min.js");',
+              'importScripts("https://unpkg.com/monaco-editor@0.34.0/min/vs/base/worker/workerMain.js");'
+            ].join('\n'));
+          }
+          return 'data:application/javascript;charset=utf-8;base64,' + btoa([
+            'self.MonacoEnvironment = undefined;',
+            'self.AcquisitionObject = undefined;',
+            'importScripts("https://unpkg.com/monaco-editor@0.34.0/min/vs/base/worker/workerMain.js");'
+          ].join('\n'));
+        }
+      };
+
       codeNodes.forEach((codeEl) => {
         const el = codeEl;
         if (el.dataset.enhanced === '1') return;
@@ -264,7 +284,8 @@
     input = '';
 
     const loadingId = Date.now();
-    addMessage('ai', '...', { loading: true, id: loadingId });
+    const aiMessage = { role: 'ai', content: '', id: loadingId, streaming: true };
+    addMessage('ai', '', { loading: true, id: loadingId, streaming: true });
 
     loading = true;
 
@@ -279,31 +300,82 @@
         })
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data?.message || 'Failed to get response');
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let done = false;
+
+      while (!done) {
+        const { done: chunkDone, value } = await reader.read();
+        done = chunkDone;
+        
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') {
+                done = true;
+                break;
+              }
+              
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.content || '';
+                if (content) {
+                  const c = activeConv();
+                  if (c) {
+                    const msgIndex = c.messages.findIndex(m => m.id === loadingId);
+                    if (msgIndex !== -1) {
+                      c.messages[msgIndex].content += content;
+                      conversations = conversations.map(x => x.id === c.id ? c : x);
+                      save();
+                    }
+                  }
+                }
+              } catch (e) {
+                // Skip invalid JSON lines
+              }
+            }
+          }
+        }
+      }
+
+      // Finalize the message
       const c = activeConv();
       if (c) {
-        c.messages = c.messages.filter(m => !m.loading || m.id !== loadingId).concat(data.message);
-        conversations = conversations.map(x => x.id === c.id ? c : x);
+        const msgIndex = c.messages.findIndex(m => m.id === loadingId);
+        if (msgIndex !== -1) {
+          c.messages[msgIndex].streaming = false;
+          conversations = conversations.map(x => x.id === c.id ? c : x);
+          save();
+        }
         if (!c.title || c.title === 'Untitled') {
           const firstUser = c.messages.find(m => m.role === 'user');
           if (firstUser) c.title = (firstUser.content || 'New Chat').slice(0, 40);
         }
-        save();
       }
 
     } catch (e) {
       const c = activeConv();
       if (c) {
-        c.messages = c.messages.map(m => m.loading && m.id === loadingId 
-          ? { role: 'ai', content: `Error: ${e.message || 'Unknown error'}` }
-          : m);
-        conversations = conversations.map(x => x.id === c.id ? c : x);
-        save();
+        const msgIndex = c.messages.findIndex(m => m.id === loadingId);
+        if (msgIndex !== -1) {
+          c.messages[msgIndex] = { 
+            role: 'ai', 
+            content: `Error: ${e.message || 'Unknown error'}`, 
+            error: true 
+          };
+          conversations = conversations.map(x => x.id === c.id ? c : x);
+          save();
+        }
       }
     } finally {
       loading = false;
