@@ -744,11 +744,9 @@
     position: relative;
     width: 100%;
     max-width: 100%;
-    height: 100%;
+    height: 100vh;
     overflow: hidden;
-    -webkit-overflow-scrolling: touch;
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
+    touch-action: pan-y;
   }
   
   .chat-messages {
@@ -762,13 +760,11 @@
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    -webkit-overflow-scrolling: touch;
     height: 100%;
     position: relative;
-    touch-action: pan-y;
     overscroll-behavior: contain;
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   .messages-inner {
@@ -781,6 +777,8 @@
     min-height: 100%;
     padding: 1px 0 40px;
     position: relative;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
   }
   
   .chat-messages.loading {
