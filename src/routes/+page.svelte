@@ -32,7 +32,7 @@
   const USERNAME_KEY = 'chronoklchat:username';
   const WEB_SEARCH_KEY = 'chronoklchat:webSearch';
   const IMAGE_CACHE_KEY = 'chronoklchat:imageCache:v1';
-  const WEB_SEARCH_DISABLED = true; // Temporarily disable web search feature
+  const WEB_SEARCH_DISABLED = false; // Temporarily disable web search feature
   const IMAGE_CACHE_TTL = 24 * 60 * 60 * 1000;
   const IMAGE_CACHE_LIMIT = 100;
   const IMAGE_CACHE_SOFT_BYTES = 5 * 1024 * 1024;
@@ -236,12 +236,6 @@
   }
   
   function toggleWebSearch() {
-    // Feature temporarily disabled
-    if (WEB_SEARCH_DISABLED) {
-      webSearchEnabled = false;
-      saveWebSearch();
-      return;
-    }
     webSearchEnabled = !webSearchEnabled;
     saveWebSearch();
   }
