@@ -40,6 +40,6 @@ const fileRouter = {
 export const { GET, POST } = createRouteHandler({ router: fileRouter });
 
 export const config = {
-  runtime: 'nodejs18.x'
+  runtime: 'nodejs20.x'
 };
 
