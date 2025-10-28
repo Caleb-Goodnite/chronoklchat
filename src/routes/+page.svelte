@@ -2,7 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
-  import { UploadButton, generateSvelteHelpers } from '@uploadthing/svelte';
+  import UploadButton from '$lib/components/uploadthing/UploadButton.svelte';
+  import { generateSvelteHelpers } from '$lib/vendor/uploadthing/createUploadThing';
   import '@uploadthing/svelte/styles.css';
 
   const uploadthingUploader = generateSvelteHelpers().createUploader('chatImage', {});
