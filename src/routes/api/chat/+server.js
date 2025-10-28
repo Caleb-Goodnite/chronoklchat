@@ -104,7 +104,7 @@ export async function POST({ request, url }) {
       headers: {
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'HTTP-Referer': APP_REFERER,
-        'X-Title': 'ChronoklChat',
+        'X-Title': 'Chronokl',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(requestBody)
