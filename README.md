@@ -1,38 +1,57 @@
-# sv
+## Chronokl Chat
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit app for chat, web search, and image uploads.
 
-## Creating a project
+### Prerequisites
+- Bun (`bun --version`)
 
-If you're seeing this, you've probably already done this step. Congrats!
-
+### Install
 ```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
+bun install
 ```
 
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
+### Environment
+Create a `.env` file (see `.env.example`) with:
 ```sh
-npm run dev
+# OpenRouter (chat)
+OPENROUTER_API_KEY="sk_or_..."
+APP_REFERER="http://localhost:5173" # optional
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+# Search
+SUPERMEMORY_API_KEY="..."
+BRAVE_API_KEY="..."
+
+# Uploadthing
+UPLOADTHING_APP_ID="..."
+UPLOADTHING_SECRET="..."
 ```
 
-## Building
-
-To create a production version of your app:
-
+### Build
 ```sh
-npm run build
+bun run build
 ```
 
-You can preview the production build with `npm run preview`.
+Optional preview (serves the built app):
+```sh
+bun run preview
+```
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+### API
+- POST `/api/chat`
+  - Body: `{ messages: Array<{ role: 'user'|'ai'|'system', content: string | Array<{type:'text'|'image_url', text?: string, image_url?:{url:string}}> }>, model?: string }`
+  - Uses OpenRouter. Default model: `x-ai/grok-4-fast`.
+
+- POST `/api/search`
+  - Body: `{ query: string }`
+  - Looks up Supermemory first, falls back to Brave (site:grokipedia.com) and stores top result.
+
+- GET/POST `/api/uploadthing`
+  - Route `chatImage` allows up to 4 images, 8MB each.
+
+### Scripts
+- `bun run build` — production build (Vite)
+- `bun run preview` — serve build
+- `bun run lint` — lint
+
+### Notes
+- Do not commit real API keys. Use `.env`.

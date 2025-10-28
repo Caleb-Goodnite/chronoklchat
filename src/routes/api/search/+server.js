@@ -1,4 +1,6 @@
 import { json } from '@sveltejs/kit';
+import { Supermemory } from 'supermemory';
+import { BraveSearch } from 'brave-search';
 
 export async function POST({ request }) {
   try {
@@ -8,48 +10,79 @@ export async function POST({ request }) {
       return json({ error: 'Query is required' }, { status: 400 });
     }
 
-    // Use Wikipedia API for search (no CORS issues, no key required)
-    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=3`;
-    
-    const response = await fetch(searchUrl, {
-      headers: {
-        'User-Agent': 'ChronoklChat/1.0'
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Wikipedia API returned ${response.status}`);
+    const supermemoryKey = process.env.SUPERMEMORY_API_KEY;
+    const braveKey = process.env.BRAVE_API_KEY;
+
+    if (!supermemoryKey || !braveKey) {
+      return json({
+        error: 'Search service not configured',
+        message: 'Missing SUPERMEMORY_API_KEY or BRAVE_API_KEY environment variables'
+      }, { status: 500 });
     }
-    
-    const data = await response.json();
-    
-    // Format results from Wikipedia
-    const searchResults = data.query?.search || [];
-    
-    if (searchResults.length === 0) {
-      return json({ 
+
+    const supermemoryClient = new Supermemory({ apiKey: supermemoryKey });
+    const braveClient = new BraveSearch({ apiKey: braveKey });
+
+    const memorySearch = await supermemoryClient.search.memories({
+      q: query,
+      limit: 3
+    });
+
+    if (memorySearch.total > 0) {
+      return json({
         results: {
-          summary: `No Wikipedia results found for "${query}". Try rephrasing your question.`,
+          summary: memorySearch.results[0]?.content ?? '',
+          title: memorySearch.results[0]?.title ?? null,
+          items: memorySearch.results.map((result) => ({
+            title: result.title ?? result.metadata?.title ?? 'Grokipedia result',
+            snippet: result.content,
+            url: result.metadata?.url ?? null
+          }))
+        }
+      });
+    }
+
+    const braveResponse = await braveClient.search.query({
+      q: `${query} site:grokipedia.com`,
+      count: 5
+    });
+
+    const webResults = braveResponse.web?.results ?? [];
+
+    if (webResults.length === 0) {
+      return json({
+        results: {
+          summary: `No Grokipedia results found for "${query}". Try rephrasing your question.`,
           items: []
         }
       });
     }
-    
-    // Get the first result's extract
-    const topResult = searchResults[0];
-    const snippet = topResult.snippet.replace(/<[^>]*>/g, ''); // Remove HTML tags
-    
-    const results = {
-      summary: snippet,
-      title: topResult.title,
-      items: searchResults.slice(0, 3).map(item => ({
-        title: item.title,
-        snippet: item.snippet.replace(/<[^>]*>/g, ''),
-        url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`
-      }))
-    };
-    
-    return json({ results });
+
+    const topResult = webResults[0];
+
+    await supermemoryClient.memories.add({
+      content: topResult.description ?? '',
+      metadata: {
+        url: topResult.url,
+        title: topResult.title,
+        source: 'grokipedia'
+      },
+      title: topResult.title
+    });
+
+    const items = webResults.slice(0, 3).map((result) => ({
+      title: result.title,
+      snippet: result.description ?? '',
+      url: result.url
+    }));
+
+    return json({
+      results: {
+        summary: topResult.description ?? '',
+        title: topResult.title,
+        items
+      }
+    });
     
   } catch (err) {
     console.error('Search API error:', err);
