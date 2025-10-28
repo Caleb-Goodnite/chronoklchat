@@ -2,9 +2,11 @@
   import { onMount, onDestroy } from 'svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
-  
-  export const ssr = false;
+  import { UploadButton, generateSvelteHelpers } from '@uploadthing/svelte';
+  import '@uploadthing/svelte/styles.css';
 
+  const uploadthingUploader = generateSvelteHelpers().createUploader('chatImage', {});
+  
   let input = '';
   let loading = false;
   let conversations = [];
@@ -19,13 +21,194 @@
   let mobileNavOpen = false;
   // keep track of resize listeners cleanup
   let removeResize;
+  let pendingUploads = [];
+  let uploadErrors = [];
+  let uploadBusy = false;
+  let imageCache = [];
 
   const STORAGE_KEY = 'chronoklchat:conversations:v1';
   const THEME_KEY = 'chronoklchat:theme';
   const NOOMAN_KEY = 'chronoklchat:noomanMode';
   const USERNAME_KEY = 'chronoklchat:username';
   const WEB_SEARCH_KEY = 'chronoklchat:webSearch';
+  const IMAGE_CACHE_KEY = 'chronoklchat:imageCache:v1';
   const WEB_SEARCH_DISABLED = true; // Temporarily disable web search feature
+  const IMAGE_CACHE_TTL = 24 * 60 * 60 * 1000;
+  const IMAGE_CACHE_LIMIT = 100;
+  const IMAGE_CACHE_SOFT_BYTES = 5 * 1024 * 1024;
+  const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+  /** @typedef {{ id: string, url: string, name: string, size: number, type: string, uploadedAt: number, expiresAt: number, previewDataUrl: string | null }} ImageAttachment */
+
+  function parseContentParts(content) {
+    const parts = [];
+    const pushText = (value) => {
+      const text = String(value ?? '').trim();
+      if (text) parts.push({ kind: 'text', text });
+    };
+    const pushImage = (url) => {
+      const safe = typeof url === 'string' ? url.trim() : '';
+      if (safe) parts.push({ kind: 'image', url: safe });
+    };
+    const handlePart = (part) => {
+      if (!part) return;
+      if (typeof part === 'string') {
+        pushText(part);
+        return;
+      }
+      if (part.type === 'text' && 'text' in part) {
+        pushText(part.text);
+        return;
+      }
+      if (part.type === 'image_url' && part.image_url?.url) {
+        pushImage(part.image_url.url);
+        return;
+      }
+      if ('text' in part) {
+        pushText(part.text);
+      }
+      if ('url' in part && part.url) {
+        pushImage(part.url);
+      }
+    };
+
+    if (Array.isArray(content)) {
+      content.forEach(handlePart);
+    } else if (content && typeof content === 'object') {
+      handlePart(content);
+    } else if (typeof content === 'string') {
+      pushText(content);
+    }
+
+    return parts;
+  }
+
+  function isImageAttachment(value) {
+    if (!value || typeof value !== 'object') return false;
+    const attachment = /** @type {Record<string, unknown>} */ (value);
+    return typeof attachment.id === 'string'
+      && typeof attachment.url === 'string'
+      && typeof attachment.name === 'string'
+      && typeof attachment.size === 'number'
+      && typeof attachment.type === 'string'
+      && typeof attachment.uploadedAt === 'number'
+      && typeof attachment.expiresAt === 'number'
+      && ('previewDataUrl' in attachment ? (typeof attachment.previewDataUrl === 'string' || attachment.previewDataUrl === null) : true);
+  }
+
+  function loadImageCacheFromStorage() {
+    try {
+      const raw = localStorage.getItem(IMAGE_CACHE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(isImageAttachment);
+    } catch {
+      return [];
+    }
+  }
+
+  function pruneImageCache(attachments) {
+    const now = Date.now();
+    const fresh = attachments
+      .filter((item) => item.expiresAt > now)
+      .sort((a, b) => b.uploadedAt - a.uploadedAt);
+
+    if (fresh.length > IMAGE_CACHE_LIMIT) {
+      fresh.length = IMAGE_CACHE_LIMIT;
+    }
+
+    let budget = IMAGE_CACHE_SOFT_BYTES;
+    const kept = [];
+    for (const item of fresh) {
+      const previewSize = item.previewDataUrl ? Math.ceil(item.previewDataUrl.length * 0.75) : 0;
+      if (previewSize <= budget) {
+        kept.push(item);
+        budget -= previewSize;
+      } else if (!item.previewDataUrl) {
+        kept.push(item);
+      }
+    }
+    return kept;
+  }
+
+  function saveImageCache(attachments) {
+    try {
+      localStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(attachments));
+    } catch {}
+  }
+
+  async function createThumbnail(url) {
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      const bitmap = await createImageBitmap(blob);
+      const maxSize = 256;
+      const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      return canvas.toDataURL('image/webp', 0.8);
+    } catch {
+      return null;
+    }
+  }
+
+  async function cacheUploadedFiles(files) {
+    const now = Date.now();
+    const next = [...imageCache];
+    const prepared = [];
+
+    for (const file of files) {
+      const existing = next.find((item) => item.id === file.id || item.url === file.url);
+      if (existing) {
+        const updated = { ...existing, ...file, uploadedAt: now, expiresAt: now + IMAGE_CACHE_TTL };
+        const index = next.findIndex((item) => item.id === existing.id);
+        next[index] = updated;
+        prepared.push(updated);
+        continue;
+      }
+
+      const previewDataUrl = await createThumbnail(file.url);
+      const attachment = {
+        ...file,
+        uploadedAt: now,
+        expiresAt: now + IMAGE_CACHE_TTL,
+        previewDataUrl: previewDataUrl ?? null
+      };
+      next.push(attachment);
+      prepared.push(attachment);
+    }
+
+    const pruned = pruneImageCache(next);
+    imageCache = pruned;
+    saveImageCache(pruned);
+    return prepared;
+  }
+
+  function validateFiles(files) {
+    const accepted = [];
+    const rejected = [];
+    for (const file of files) {
+      if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+        rejected.push(`${file.name}: unsupported type`);
+        continue;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        rejected.push(`${file.name}: larger than 8MB`);
+        continue;
+      }
+      accepted.push(file);
+    }
+    return { accepted, rejected };
+  }
   
   let noomanMode = false;
   let username = '';
@@ -193,12 +376,15 @@ Remember: You are Nooman. You are tired. You are brilliant. You are annoyed. Act
         // Standard GPT 5 personality
         conv.messages.unshift(
           { 
-            role: 'system', 
+        
+          role: 'system', 
+        
             content: 'You are GPT 5, an AI assistant through a site called Chronokl. You are helpful, precise, and thoughtful in your responses.\n\n' +
                     '## Core Guidelines\n' +
                     '- Be concise but thorough in your responses\n' +
                     '- Use markdown formatting when helpful (``` for code, **bold** for emphasis)\n' +
                     '- If you\'re unsure about something, say so rather than guessing\n' +
+                    '- If you dont know the answer to somthing instead of making something up try to figure it out using the brave search or grokipedia\n' +
                     '- Be friendly and approachable in your tone\n' +
                     '- Break down complex topics into easy-to-understand explanations\n' +
                     '- When providing code, include comments and context\n' +
@@ -371,6 +557,11 @@ Remember: You are Nooman. You are tired. You are brilliant. You are annoyed. Act
     loadNoomanMode();
     loadUsername();
     loadWebSearch();
+    const storedImages = pruneImageCache(loadImageCacheFromStorage());
+    imageCache = storedImages;
+    if (storedImages.length) {
+      saveImageCache(storedImages);
+    }
 
     const data = load();
     if (data && Array.isArray(data.conversations) && data.conversations.length) {
@@ -402,13 +593,31 @@ Remember: You are Nooman. You are tired. You are brilliant. You are annoyed. Act
     if (typeof removeResize === 'function') removeResize();
   });
 
+  const buildImagePart = (image) => ({
+    type: 'image_url',
+    image_url: { url: image.url }
+  });
+
   async function send() {
     const text = input.trim();
-    if (!text || loading) return;
+    const hasImages = pendingUploads.length > 0;
+    if ((!text && !hasImages) || loading || uploadBusy) return;
 
     // Add user message
-    addMessage('user', text);
+    const contentParts = [];
+    if (text) contentParts.push({ type: 'text', text });
+    if (hasImages) {
+      pendingUploads.forEach((img) => {
+        contentParts.push(buildImagePart(img));
+      });
+    }
+
+    addMessage('user', contentParts.length === 1 ? contentParts[0] : contentParts, {
+      attachments: pendingUploads.slice()
+    });
+
     input = '';
+    pendingUploads = [];
 
     // Add loading indicator
     const loadingId = Date.now();
@@ -427,12 +636,12 @@ Remember: You are Nooman. You are tired. You are brilliant. You are annoyed. Act
       if (shouldSearch) {
         searching = true;
         autoSearchUsed = !webSearchEnabled && isLikelyRecentOrNews(text);
-        try {
-          const searchRes = await fetch('/api/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: text })
-          });
+    try {
+      const searchRes = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: text })
+      });
           
           if (searchRes.ok) {
             const searchData = await searchRes.json();
@@ -469,7 +678,7 @@ Remember: You are Nooman. You are tired. You are brilliant. You are annoyed. Act
       // Prepare messages with search context if available
       const messagesToSend = (activeConv()?.messages || [])
         .filter(m => !m.loading)
-        .map(({ role, content }) => ({ role, content }));
+        .map(({ role, content, attachments }) => ({ role, content, attachments }));
       
       // Add search context to the last user message if we have results
       if (searchContext && messagesToSend.length > 0) {
@@ -546,7 +755,6 @@ Remember: You are Nooman. You are tired. You are brilliant. You are annoyed. Act
   <meta name="robots" content="index, follow" />
   
   <!-- Preconnect to external domains -->
-  <link rel="preconnect" href="https://api.openai.com" />
   <link rel="preconnect" href="https://openrouter.ai" />
   
   <!-- Preload critical assets -->
@@ -679,17 +887,68 @@ Remember: You are Nooman. You are tired. You are brilliant. You are annoyed. Act
             </div>
           {/if}
           <div class="input-wrapper">
-            <textarea 
+            <textarea
               bind:value={input}
               placeholder="Type a message..."
               on:keydown={handleKeyDown}
               disabled={loading}
               rows="1"
             ></textarea>
-            <button 
+            <div class="upload-trigger">
+              <UploadButton
+                disabled={loading || uploadBusy}
+                uploader={{
+                  ...uploadthingUploader,
+                  onBeforeUploadBegin: async ({ files }) => {
+                    uploadErrors = [];
+                    const { accepted, rejected } = validateFiles(files);
+                    if (rejected.length) {
+                      uploadErrors = rejected;
+                    }
+                    uploadBusy = accepted.length > 0;
+                    return accepted;
+                  },
+                  onClientUploadComplete: (files) => {
+                    uploadBusy = false;
+                    const mapped = files.map((file) => ({
+                      id: file.key,
+                      url: file.url,
+                      name: file.name,
+                      size: file.size,
+                      type: file.type
+                    }));
+                    pendingUploads = [...pendingUploads, ...mapped];
+                    void cacheUploadedFiles(mapped);
+                  },
+                  onUploadError: (error) => {
+                    uploadBusy = false;
+                    uploadErrors = [...uploadErrors, error.message];
+                  }
+                }}
+              >
+                <button slot="button-content" class="icon-btn" type="button" aria-label="Upload image">
+                  {#if uploadBusy}
+                    <span class="spinner small"></span>
+                  {:else}
+                    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                      <path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zm-7 9c-1.1 0-2-.9-2-2h-2c0 2.2 1.8 4 4 4s4-1.8 4-4h-2c0 1.1-.9 2-2 2z" />
+                    </svg>
+                  {/if}
+                </button>
+              </UploadButton>
+              {#if uploadErrors.length}
+                <div class="upload-errors" role="status">
+                  {uploadErrors[0]}
+                  {#if uploadErrors.length > 1}
+                    <span> (+{uploadErrors.length - 1} more)</span>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+            <button
               class="send-button" 
               type="submit" 
-              disabled={loading || !input.trim()}
+              disabled={loading || uploadBusy || (!input.trim() && pendingUploads.length === 0)}
               aria-label="Send message"
             >
               {#if loading}
@@ -1652,6 +1911,25 @@ Remember: You are Nooman. You are tired. You are brilliant. You are annoyed. Act
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .upload-trigger {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  .upload-trigger .icon-btn {
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+  
+  .upload-errors {
+    font-size: 0.8rem;
+    color: var(--error);
   }
   
   .icon-btn:hover {

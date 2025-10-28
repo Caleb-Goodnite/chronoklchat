@@ -1,5 +1,4 @@
 import { json } from '@sveltejs/kit';
-import { OpenAI } from 'openai';
 import { env } from '$env/dynamic/private';
 
 // Map our internal role names to OpenRouter expected roles
@@ -21,7 +20,6 @@ function processMessageContent(content) {
   if (Array.isArray(content)) {
     return content.map(part => {
       if (part.type === 'image_url' && part.image_url && part.image_url.url) {
-        // Handle base64 images or URLs
         return {
           type: 'image_url',
           image_url: {
@@ -29,9 +27,11 @@ function processMessageContent(content) {
           }
         };
       }
-      // Default to text
-      return { type: 'text', text: String(part.text || '') };
-    }).filter(part => part.text || (part.type === 'image_url' && part.image_url.url));
+      if (part.type === 'text') {
+        return { type: 'text', text: String(part.text || '') };
+      }
+      return null;
+    }).filter(Boolean);
   }
   
   // Default fallback
@@ -52,48 +52,26 @@ export async function POST({ request, url }) {
       return json({ error: 'Server missing OPENROUTER_API_KEY' }, { status: 500 });
     }
 
-    // Get model from the request or default to GPT-5 Nano
-    const model = frontendModel || 'openai/gpt-5-nano';
+    // Get model from the request or default to Grok 4 Fast
+    // MOdel Change only because grok 4 fast is a better inteligence model, and isnt woke. 
+    const model = frontendModel || 'x-ai/grok-4-fast';
     const APP_REFERER = env.APP_REFERER || url.origin || 'http://localhost:5173';
 
     // Process messages for the API
     const filteredMessages = messages
-      .filter(m => !m.loading)
-      .map(({ role, content }) => {
-        // Handle different content formats (text, array of content parts, etc.)
-        let processedContent = content;
-        
-        if (Array.isArray(content)) {
-          // Handle array content (text + images)
-          processedContent = content.map(part => {
-            if (part.type === 'image_url' && part.image_url?.url) {
-              return {
-                type: 'image_url',
-                image_url: {
-                  url: part.image_url.url
-                }
-              };
-            }
-            return { type: 'text', text: String(part.text || part) };
-          });
-        } else if (typeof content === 'string') {
-          processedContent = [{ type: 'text', text: content }];
-        }
-        
-        return {
-          role: mapRole(role),
-          content: processedContent
-        };
-      });
+      .filter((m) => !m.loading)
+      .map(({ role, content }) => ({
+        role: mapRole(role),
+        content: processMessageContent(content)
+      }));
 
     // Prepare the request body
     const requestBody = {
       model,
       messages: filteredMessages,
       // Add any model-specific parameters
-      ...(model.includes('gpt-5') && {
-        // GPT-5-specific settings
-        temperature: 0.75,
+      ...(model.includes('grok-4-fast') && {
+        temperature: 0.7,
         max_tokens: 3000,
         top_p: 0.9,
       })
